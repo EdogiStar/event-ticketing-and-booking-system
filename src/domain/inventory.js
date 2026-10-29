@@ -48,10 +48,46 @@ export function createStore() {
 export function createEvent(store, input) {
   requireStore(store);
   requireObject(input, 'event');
-  const { name } = input;
-  const event = { id: newId(), name: requireText(name, 'event name'), tiers: new Map(), waitlist: new Queue() };
+  const { name, title, city, venue, date } = input;
+  if (title !== undefined || city !== undefined || venue !== undefined || date !== undefined) {
+    requireText(title, 'event title'); requireText(city, 'event city'); requireText(venue, 'event venue');
+    if (!isValidIsoDate(date)) throw new DomainError('VALIDATION', 'event date must be a valid ISO date');
+  }
+  const eventName = requireText(title ?? name, 'event title');
+  const event = { id: newId(), name: eventName, title: eventName, tiers: new Map(), waitlist: new Queue(), published: false };
+  if (city !== undefined) event.city = requireText(city, 'event city');
+  if (venue !== undefined) event.venue = requireText(venue, 'event venue');
+  if (date !== undefined) {
+    if (!isValidIsoDate(date)) throw new DomainError('VALIDATION', 'event date must be a valid ISO date');
+    event.date = date;
+  }
   store.events.set(event.id, event);
   return event;
+}
+
+function isValidIsoDate(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) && !Number.isNaN(Date.parse(value)) &&
+    (value.length !== 10 || new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value);
+}
+
+export function publishEvent(store, eventId) {
+  requireStore(store);
+  const event = getEvent(store, eventId);
+  if (event.tiers.size === 0) throw new DomainError('INVALID_STATE', 'An event needs at least one ticket tier before publishing');
+  event.published = true;
+  return event;
+}
+
+export function listEventSummaries(store, { publishedOnly = true } = {}) {
+  requireStore(store);
+  if (typeof publishedOnly !== 'boolean') throw new DomainError('VALIDATION', 'publishedOnly must be a boolean');
+  return [...store.events.values()]
+    .filter((event) => !publishedOnly || event.published)
+    .map((event) => ({
+      id: event.id, name: event.name, title: event.title ?? event.name, city: event.city, venue: event.venue,
+      date: event.date, published: Boolean(event.published),
+      tiers: [...event.tiers.values()].map((tier) => ({ ...tier })),
+    }));
 }
 
 export function addTier(store, eventId, input) {
