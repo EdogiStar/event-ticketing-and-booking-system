@@ -12,15 +12,15 @@ Every time you give an AI tool a significant prompt, add an entry. Three lines e
 
 ## Build 2
 
-### Prompt 1: Build 2 prompt (docs/build-2.md)
-- **What I asked:**
-- **What came back:**
-- **What was wrong (or "nothing"):**
+### Prompt 1: Build 2 prompt (`docs/build-2.md`)
+- **What I asked:** Implement Build 2 event publishing, search, filtering, and sorting according to the project requirements.
+- **What came back:** Added publishing rules, event search and filters, stable merge sort, and automated tests.
+- **What was wrong (or "nothing"):** S04 acceptance criteria were blank, so assumptions were made about publishing rules and tested accordingly.
 
-### Prompt 2:
-- **What I asked:**
-- **What came back:**
-- **What was wrong (or "nothing"):**
+### Prompt 2: Testing and verification
+- **What I asked:** Run the tests and demo to verify Build 2 and preserve Build 1 functionality.
+- **What came back:** All 20 tests passed, and the existing demo ran successfully.
+- **What was wrong (or "nothing"):** Nothing failed during verification; S04 assumptions still need confirmation.
 
 ## Build 3
 
