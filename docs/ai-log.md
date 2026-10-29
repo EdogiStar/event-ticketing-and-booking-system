@@ -3,6 +3,13 @@
 Every time you give an AI tool a significant prompt, add an entry. Three lines each.
 "Nothing was wrong" is allowed, but it is rarely true. Your instructor will read this.
 
+## Build 1
+
+### Prompt 1: Domain core in the terminal
+- **What I asked:** Create the Build 1 terminal domain core, linked FIFO waitlist, demo, and lookup benchmark with no external packages.
+- **What came back:** Added the domain errors, crypto IDs/references, inventory operations, linked queue, runnable demo, benchmark, and npm scripts.
+- **What was wrong (or "nothing"):** Booking input was initially destructured before validation, so null input could escape as a TypeError; changed the operations to validate their input objects first. Used unbiased `crypto.randomInt` for reference characters.
+
 ## Build 2
 
 ### Prompt 1: Build 2 prompt (docs/build-2.md)
