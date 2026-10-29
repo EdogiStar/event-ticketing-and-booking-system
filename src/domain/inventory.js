@@ -79,20 +79,25 @@ export function bookTickets(store, input) {
   }
   const event = getEvent(store, eventId);
   const tier = getTier(event, tierId);
-  if (tier.remaining < quantity) {
-    throw new DomainError('SOLD_OUT', `Only ${tier.remaining} ticket(s) remain in ${tier.name}`);
+  const booking = createBooking(store, event, tier, name, quantity, tier.remaining);
+  tier.remaining -= quantity;
+  store.bookingsByReference.set(booking.reference, booking);
+  store.bookings.push(booking);
+  return booking;
+}
+
+function createBooking(store, event, tier, name, quantity, available) {
+  if (available < quantity) {
+    throw new DomainError('SOLD_OUT', `Only ${available} ticket(s) remain in ${tier.name}`);
   }
 
   // Generate a unique reference before changing inventory, keeping failures atomic.
   let reference;
   do { reference = newReference(); } while (store.bookingsByReference.has(reference));
   const booking = {
-    id: newId(), reference, eventId, tierId, attendeeName: name, quantity,
+    id: newId(), reference, eventId: event.id, tierId: tier.id, attendeeName: name, quantity,
     totalPriceCents: tier.priceCents * quantity, status: 'confirmed',
   };
-  tier.remaining -= quantity;
-  store.bookingsByReference.set(reference, booking);
-  store.bookings.push(booking);
   return booking;
 }
 
@@ -104,8 +109,31 @@ export function cancelBooking(store, reference) {
   if (booking.status === 'cancelled') throw new DomainError('ALREADY_CANCELLED', `Booking ${code} is already cancelled`);
   const event = getEvent(store, booking.eventId);
   const tier = getTier(event, booking.tierId);
+  const next = event.waitlist.peek();
+  let fulfilledBooking;
+  if (next && next.tierId === tier.id) {
+    const name = requireText(next.attendeeName, 'attendee name');
+    if (!Number.isSafeInteger(next.quantity) || next.quantity < 1 || next.quantity > 10) {
+      throw new DomainError('VALIDATION', 'quantity must be a whole number from 1 to 10');
+    }
+    if (next.quantity <= tier.remaining + booking.quantity) {
+      // Prepare against capacity cancellation will release; validation and ID/reference
+      // generation finish before cancellation or inventory state changes.
+      fulfilledBooking = createBooking(
+        store, event, tier, name, next.quantity, tier.remaining + booking.quantity,
+      );
+    }
+  }
   booking.status = 'cancelled';
   tier.remaining += booking.quantity;
+  if (fulfilledBooking) {
+    tier.remaining -= fulfilledBooking.quantity;
+    store.bookingsByReference.set(fulfilledBooking.reference, fulfilledBooking);
+    store.bookings.push(fulfilledBooking);
+    event.waitlist.dequeue();
+    // Additive return detail; existing callers still receive the cancelled booking.
+    booking.fulfilledBooking = fulfilledBooking;
+  }
   return booking;
 }
 
@@ -120,13 +148,14 @@ export function findBookingByReference(store, reference) {
 export function joinWaitlist(store, input) {
   requireStore(store);
   requireObject(input, 'waitlist entry');
-  const { eventId, attendeeName, quantity = 1 } = input;
+  const { eventId, tierId, attendeeName, quantity = 1 } = input;
   const event = getEvent(store, eventId);
+  const tier = getTier(event, tierId);
   const name = requireText(attendeeName, 'attendee name');
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
     throw new DomainError('VALIDATION', 'quantity must be a whole number from 1 to 10');
   }
-  const entry = { id: newId(), eventId, attendeeName: name, quantity };
+  const entry = { id: newId(), eventId, tierId: tier.id, attendeeName: name, quantity };
   event.waitlist.enqueue(entry);
   return entry;
 }
