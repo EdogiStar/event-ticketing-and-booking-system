@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRouter } from './router.js';
 import { DomainError } from '../domain/errors.js';
+import { registerApiRoutes } from './apiRoutes.js';
 
 const publicDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../public');
 const MIME_TYPES = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.txt': 'text/plain; charset=utf-8' };
@@ -41,8 +42,9 @@ async function serveStatic(pathname, response) {
   }
 }
 
-export function createApp({ router = createRouter() } = {}) {
+export function createApp({ router = createRouter(), repository, paymentGateway } = {}) {
   router.get('/health', () => ({ status: 'ok' }));
+  registerApiRoutes(router, { repository, paymentGateway });
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://localhost');
@@ -51,7 +53,7 @@ export function createApp({ router = createRouter() } = {}) {
       if (route?.badPathEncoding) throw new DomainError('BAD_PATH', 'Invalid URL path encoding');
       if (route) {
         const result = await route.handler({ request, response, params: route.params, query: url.searchParams, body });
-        if (!response.writableEnded) sendJson(response, 200, result ?? {});
+        if (!response.writableEnded) sendJson(response, response.statusCode >= 200 ? response.statusCode : 200, result ?? {});
         return;
       }
       if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
@@ -68,7 +70,7 @@ export function createApp({ router = createRouter() } = {}) {
       sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Route was not found' } });
     } catch (error) {
       const known = error instanceof DomainError;
-      const status = error?.code === 'BAD_JSON' ? 400 : error?.code === 'INVALID_TRANSITION' || error?.code === 'VALIDATION' ? 400 : 500;
+      const status = error?.code === 'BAD_JSON' || ['INVALID_TRANSITION', 'VALIDATION', 'PAYMENT_DECLINED', 'SOLD_OUT', 'INVALID_STATE'].includes(error?.code) ? 400 : error?.code === 'NOT_FOUND' ? 404 : error?.code === 'FORBIDDEN' ? 403 : 500;
       sendJson(response, status, { error: { code: known ? error.code : 'INTERNAL_ERROR', message: known ? error.message : 'Internal server error' } });
     }
   });
