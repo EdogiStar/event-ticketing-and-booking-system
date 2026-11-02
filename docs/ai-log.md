@@ -25,3 +25,21 @@
 - **What I asked:** Add the architecture diagrams, booking state machine, Node HTTP router/server, configuration, startup script, and tests.
 - **What came back:** A layered architecture document, explicit booking transitions, static-file HTTP server, `/health` route, startup configuration, and `node:test` coverage.
 - **What was wrong (or "nothing"):** The first server draft relied on an implicit response/request property for HEAD handling and had redundant error-status logic; both were simplified. Added a regression test proving static requests cannot escape `public/`.
+
+## Build 4
+
+### Prompt 1: Build 4 prompt (`docs/build-4.md`)
+- **What I asked:** Add the in-memory repository, injected services, mock payment gateway, REST routes, curl examples, and real-server API tests.
+- **What came back:** The API supports event and tier creation, publishing and search, pending bookings, mock payment, and unpaid cancellation.
+- **What was wrong (or "nothing"):** The first response-status implementation committed headers before the shared JSON responder ran; changed route handlers to set `statusCode` and let the responder write headers. The existing state machine permits a paid-to-cancelled transition for later builds, so the service explicitly limits cancellation to pending bookings in Build 4.
+- **Assumption:** The mock decline is requested with `{ "decline": true }`; the gateway receives only that boolean and never receives card data.
+
+### Prompt 2: API verification
+- **What I asked:** Run the complete `node:test` suite, including requests against a real server on a free port.
+- **What came back:** All 28 tests passed.
+- **What was wrong (or "nothing"):** Nothing remained failing after fixing the response status handling and enforcing Build 4's unpaid-only cancellation rule.
+
+### Prompt 3: Complete Build 4 criteria
+- **What I asked:** Compare the project with the Build 4 criteria and complete any missing API behavior and acceptance tests.
+- **What came back:** Added an unpublish service operation and API route, documented its curl call, and expanded real-server API coverage for S02-S06 validation and behavior.
+- **What was wrong (or "nothing"):** The initial Build 4 implementation omitted unpublishing and relied too heavily on domain tests for criteria that Build 4 requires to pass through the API. Added the missing route and API-level cases.
