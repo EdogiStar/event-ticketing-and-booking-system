@@ -139,3 +139,76 @@ test('S06 API rejects invalid quantities and sold-out requests without consuming
     assert.equal(oneTicket.status, 201);
   });
 });
+
+test('booking API enforces published events, cancellation ownership, and seat restoration', async () => {
+  await withServer(async (base) => {
+    const eventResponse = await fetch(`${base}/api/events`, {
+      method: 'POST',
+      headers: json({ 'x-user-id': 'organizer' }),
+      body: JSON.stringify({ title: 'Seats', city: 'Lagos', venue: 'Hall', date: '2026-12-05' }),
+    });
+    const event = await eventResponse.json();
+    const tierResponse = await fetch(`${base}/api/events/${event.id}/tiers`, {
+      method: 'POST',
+      headers: json({}),
+      body: JSON.stringify({ name: 'General', priceCents: 100, capacity: 1 }),
+    });
+    const tier = await tierResponse.json();
+
+    const draftBooking = await fetch(`${base}/api/bookings`, {
+      method: 'POST',
+      headers: json({ 'x-user-id': 'attendee' }),
+      body: JSON.stringify({ tierId: tier.id, quantity: 1 }),
+    });
+    assert.equal(draftBooking.status, 400);
+    assert.equal((await draftBooking.json()).error.code, 'INVALID_STATE');
+
+    await fetch(`${base}/api/events/${event.id}/publish`, { method: 'POST' });
+    const bookingResponse = await fetch(`${base}/api/bookings`, {
+      method: 'POST',
+      headers: json({ 'x-user-id': 'attendee' }),
+      body: JSON.stringify({ tierId: tier.id, quantity: 1 }),
+    });
+    const booking = await bookingResponse.json();
+    assert.equal(bookingResponse.status, 201);
+
+    const wrongOwner = await fetch(`${base}/api/bookings/${booking.reference}/cancel`, {
+      method: 'POST',
+      headers: { 'x-user-id': 'someone-else' },
+    });
+    assert.equal(wrongOwner.status, 403);
+    assert.equal((await wrongOwner.json()).error.code, 'FORBIDDEN');
+
+    const cancelled = await fetch(`${base}/api/bookings/${booking.reference}/cancel`, {
+      method: 'POST',
+      headers: { 'x-user-id': 'attendee' },
+    });
+    assert.equal(cancelled.status, 200);
+    assert.equal((await cancelled.json()).status, 'cancelled');
+
+    const payCancelled = await fetch(`${base}/api/bookings/${booking.reference}/pay`, {
+      method: 'POST',
+      headers: json({ 'x-user-id': 'attendee' }),
+      body: '{}',
+    });
+    assert.equal(payCancelled.status, 400);
+    assert.equal((await payCancelled.json()).error.code, 'INVALID_TRANSITION');
+
+    const replacement = await fetch(`${base}/api/bookings`, {
+      method: 'POST',
+      headers: json({ 'x-user-id': 'another-attendee' }),
+      body: JSON.stringify({ tierId: tier.id, quantity: 1 }),
+    });
+    assert.equal(replacement.status, 201);
+
+    for (const action of ['pay', 'cancel']) {
+      const missing = await fetch(`${base}/api/bookings/missing/${action}`, {
+        method: 'POST',
+        headers: json({ 'x-user-id': 'attendee' }),
+        body: '{}',
+      });
+      assert.equal(missing.status, 404);
+      assert.equal((await missing.json()).error.code, 'NOT_FOUND');
+    }
+  });
+});

@@ -34,6 +34,15 @@
 - **What was wrong (or "nothing"):** The first response-status implementation committed headers before the shared JSON responder ran; changed route handlers to set `statusCode` and let the responder write headers. The existing state machine permits a paid-to-cancelled transition for later builds, so the service explicitly limits cancellation to pending bookings in Build 4.
 - **Assumption:** The mock decline is requested with `{ "decline": true }`; the gateway receives only that boolean and never receives card data.
 
+## Build 5
+
+### Prompt 2: SQLite persistence and overselling fix
+- **What I asked:** Implement the Build 5 requirements in `docs/build-5.md`: SQLite persistence, atomic seat reservation, a 50-request overselling test, and a before/after demo.
+- **What came back:** Added a SQLite schema and repository, wired the server to persistent SQLite storage, made the booking service reserve seats through one conditional database update, and added the regression test and demo.
+- **What was wrong (or "nothing"):** The project had no SQLite implementation even though Build 5's prompt assumed one existed. Added the missing persistence layer while preserving the in-memory repository used by existing tests.
+- **Why not a lock variable or a second check:** A JavaScript lock variable only coordinates callers sharing that particular process and can be bypassed by another process or worker, so it cannot protect the shared database. Checking availability twice still has a race because multiple requests can pass the check before either writes; the conditional update combines the check and reservation into one database operation.
+- **Demo:** The old read-then-write flow accepted 50 bookings for 1 available seat (49 excess); the conditional SQLite update accepted 1 booking, returned `SOLD_OUT` for 49, and stored 1 sold seat.
+
 ### Prompt 2: API verification
 - **What I asked:** Run the complete `node:test` suite, including requests against a real server on a free port.
 - **What came back:** All 28 tests passed.
