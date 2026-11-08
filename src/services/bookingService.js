@@ -14,12 +14,11 @@ export function createBookingService(repository, paymentGateway) {
       const tier = get(await repository.getTier(input.tierId), 'Ticket tier', input.tierId);
       const event = get(await repository.getEvent(tier.eventId), 'Event', tier.eventId);
       if (!event.published) throw new DomainError('INVALID_STATE', 'Tickets can only be booked for a published event');
-      if (tier.remaining < input.quantity) throw new DomainError('SOLD_OUT', `Only ${tier.remaining} ticket(s) remain in ${tier.name}`);
       let reference;
       do { reference = newReference(); } while (await repository.getBooking(reference));
       const booking = { id: newId(), reference, eventId: event.id, tierId: tier.id, userId, quantity: input.quantity, amountCents: tier.priceCents * input.quantity, totalPriceCents: tier.priceCents * input.quantity, status: 'pending' };
-      tier.remaining -= input.quantity;
-      await repository.saveTier(tier);
+      const changed = await repository.reserveSeats(tier.id, input.quantity);
+      if (changed !== 1) throw new DomainError('SOLD_OUT', `Not enough tickets remain in ${tier.name}`);
       return repository.saveBooking(booking);
     },
     async pay(reference, userId, payment = {}) {
@@ -38,8 +37,7 @@ export function createBookingService(repository, paymentGateway) {
       assertTransition(booking.status, 'cancelled');
       booking.status = 'cancelled';
       const tier = get(await repository.getTier(booking.tierId), 'Ticket tier', booking.tierId);
-      tier.remaining += booking.quantity;
-      await repository.saveTier(tier);
+      await repository.releaseSeats(tier.id, booking.quantity);
       return repository.saveBooking(booking);
     },
   };

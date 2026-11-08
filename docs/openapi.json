@@ -1,0 +1,325 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Event Ticketing and Booking API",
+    "version": "1.0.0",
+    "description": "HTTP API for creating and publishing events, searching published events, and booking, paying for, or cancelling tickets. Until authentication is added, write operations identify the caller with the x-user-id header. Payments use a mock gateway and do not accept card details."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "tags": [
+    { "name": "Health" },
+    { "name": "Events" },
+    { "name": "Bookings" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Check server health",
+        "responses": {
+          "200": {
+            "description": "The server is running.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Health" },
+                "example": { "status": "ok" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "tags": ["Events"],
+        "summary": "Search published events",
+        "description": "Returns published events only. Text search matches the event title or venue. Date-only `to` values include the whole day. `sortBy` is accepted as an alias for `sort`.",
+        "parameters": [
+          { "name": "q", "in": "query", "description": "Case-insensitive text to match in title or venue.", "schema": { "type": "string" } },
+          { "name": "city", "in": "query", "description": "City to match, case-insensitively.", "schema": { "type": "string" } },
+          { "name": "from", "in": "query", "description": "Inclusive lower event date in ISO date or date-time form.", "schema": { "type": "string" } },
+          { "name": "to", "in": "query", "description": "Inclusive upper event date in ISO date or date-time form.", "schema": { "type": "string" } },
+          { "name": "maxPriceCents", "in": "query", "description": "Maximum cheapest ticket-tier price, in whole cents.", "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "onlyAvailable", "in": "query", "description": "When true, return events with at least one ticket remaining.", "schema": { "type": "boolean", "default": false } },
+          { "name": "sort", "in": "query", "description": "Sort by event date, cheapest tier price, or total remaining tickets.", "schema": { "type": "string", "enum": ["date", "price", "availability"], "default": "date" } },
+          { "name": "sortBy", "in": "query", "description": "Alias for sort; sort takes precedence when both are provided.", "schema": { "type": "string", "enum": ["date", "price", "availability"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching published events.",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/EventSummary" } }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
+      "post": {
+        "tags": ["Events"],
+        "summary": "Create an event draft",
+        "security": [{ "UserId": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEvent" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "The event draft was created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Event" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/api/events/{id}/tiers": {
+      "post": {
+        "tags": ["Events"],
+        "summary": "Add a ticket tier to an event",
+        "parameters": [
+          { "$ref": "#/components/parameters/EventId" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTier" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "The ticket tier was created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Tier" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "404": { "$ref": "#/components/responses/NotFoundError" }
+        }
+      }
+    },
+    "/api/events/{id}/publish": {
+      "post": {
+        "tags": ["Events"],
+        "summary": "Publish an event",
+        "description": "An event must have at least one ticket tier before it can be published.",
+        "parameters": [{ "$ref": "#/components/parameters/EventId" }],
+        "responses": {
+          "200": { "description": "The published event.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Event" } } } },
+          "400": { "$ref": "#/components/responses/InvalidStateError" },
+          "404": { "$ref": "#/components/responses/NotFoundError" }
+        }
+      }
+    },
+    "/api/events/{id}/unpublish": {
+      "post": {
+        "tags": ["Events"],
+        "summary": "Unpublish an event",
+        "parameters": [{ "$ref": "#/components/parameters/EventId" }],
+        "responses": {
+          "200": { "description": "The unpublished event.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Event" } } } },
+          "404": { "$ref": "#/components/responses/NotFoundError" }
+        }
+      }
+    },
+    "/api/bookings": {
+      "post": {
+        "tags": ["Bookings"],
+        "summary": "Book tickets from a tier",
+        "description": "Books 1 to 10 tickets from a tier belonging to a published event and reserves the requested inventory.",
+        "security": [{ "UserId": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateBooking" } } }
+        },
+        "responses": {
+          "201": { "description": "The pending booking.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Booking" } } } },
+          "400": {
+            "description": "Invalid booking, unpublished event, or insufficient inventory.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "examples": {
+              "validation": { "value": { "error": { "code": "VALIDATION", "message": "quantity must be a whole number from 1 to 10" } } },
+              "unpublished": { "value": { "error": { "code": "INVALID_STATE", "message": "Tickets can only be booked for a published event" } } },
+              "soldOut": { "value": { "error": { "code": "SOLD_OUT", "message": "Not enough tickets remain in General" } } }
+            } } }
+          },
+          "404": { "$ref": "#/components/responses/NotFoundError" }
+        }
+      }
+    },
+    "/api/bookings/{reference}/pay": {
+      "post": {
+        "tags": ["Bookings"],
+        "summary": "Pay for a pending booking",
+        "description": "Only the attendee who created the booking can pay. A declined mock payment leaves the booking pending. A successful payment marks it paid.",
+        "security": [{ "UserId": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/BookingReference" }],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PayBooking" } } }
+        },
+        "responses": {
+          "200": { "description": "The paid booking.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Booking" } } } },
+          "400": { "description": "Payment declined or booking cannot transition to paid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "examples": {
+            "declined": { "value": { "error": { "code": "PAYMENT_DECLINED", "message": "Payment was declined" } } },
+            "invalidTransition": { "value": { "error": { "code": "INVALID_TRANSITION", "message": "Booking cannot transition from paid to paid" } } }
+          } } } },
+          "403": { "$ref": "#/components/responses/ForbiddenError" },
+          "404": { "$ref": "#/components/responses/NotFoundError" }
+        }
+      }
+    },
+    "/api/bookings/{reference}/cancel": {
+      "post": {
+        "tags": ["Bookings"],
+        "summary": "Cancel a pending booking",
+        "description": "Only the attendee who created the booking can cancel it. Cancellation releases its reserved seats. Paid bookings cannot be cancelled in this build.",
+        "security": [{ "UserId": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/BookingReference" }],
+        "responses": {
+          "200": { "description": "The cancelled booking.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Booking" } } } },
+          "400": { "$ref": "#/components/responses/InvalidTransitionError" },
+          "403": { "$ref": "#/components/responses/ForbiddenError" },
+          "404": { "$ref": "#/components/responses/NotFoundError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "UserId": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-user-id",
+        "description": "Temporary caller identity used until authentication is implemented."
+      }
+    },
+    "parameters": {
+      "EventId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+      "BookingReference": { "name": "reference", "in": "path", "required": true, "schema": { "type": "string" } }
+    },
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "required": ["status"],
+        "properties": { "status": { "type": "string", "const": "ok" } }
+      },
+      "CreateEvent": {
+        "type": "object",
+        "required": ["title", "city", "venue"],
+        "anyOf": [{ "required": ["date"] }, { "required": ["startsAt"] }],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "city": { "type": "string", "minLength": 1 },
+          "venue": { "type": "string", "minLength": 1 },
+          "date": { "type": "string", "description": "ISO date or date-time." },
+          "startsAt": { "type": "string", "description": "Alias for date." }
+        },
+        "additionalProperties": true
+      },
+      "Event": {
+        "type": "object",
+        "required": ["id", "organizerId", "title", "name", "city", "venue", "date", "published"],
+        "properties": {
+          "id": { "type": "string" },
+          "organizerId": { "type": "string" },
+          "title": { "type": "string" },
+          "name": { "type": "string", "description": "Compatibility alias for title." },
+          "city": { "type": "string" },
+          "venue": { "type": "string" },
+          "date": { "type": "string", "description": "ISO date or date-time." },
+          "published": { "type": "boolean" }
+        }
+      },
+      "EventSummary": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Event" },
+          { "type": "object", "required": ["tiers"], "properties": { "tiers": { "type": "array", "items": { "$ref": "#/components/schemas/Tier" } } } }
+        ]
+      },
+      "CreateTier": {
+        "type": "object",
+        "required": ["name", "priceCents", "capacity"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "priceCents": { "type": "integer", "minimum": 0 },
+          "capacity": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "Tier": {
+        "type": "object",
+        "required": ["id", "eventId", "name", "priceCents", "capacity", "remaining"],
+        "properties": {
+          "id": { "type": "string" },
+          "eventId": { "type": "string" },
+          "name": { "type": "string" },
+          "priceCents": { "type": "integer", "minimum": 0 },
+          "capacity": { "type": "integer", "minimum": 1 },
+          "remaining": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "CreateBooking": {
+        "type": "object",
+        "required": ["tierId", "quantity"],
+        "properties": {
+          "tierId": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1, "maximum": 10 }
+        }
+      },
+      "Booking": {
+        "type": "object",
+        "required": ["id", "reference", "eventId", "tierId", "userId", "quantity", "amountCents", "totalPriceCents", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "reference": { "type": "string" },
+          "eventId": { "type": "string" },
+          "tierId": { "type": "string" },
+          "userId": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1, "maximum": 10 },
+          "amountCents": { "type": "integer", "minimum": 0 },
+          "totalPriceCents": { "type": "integer", "minimum": 0 },
+          "status": { "type": "string", "enum": ["pending", "paid", "cancelled"] }
+        }
+      },
+      "PayBooking": {
+        "type": "object",
+        "properties": { "decline": { "type": "boolean", "default": false } },
+        "additionalProperties": true
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": { "code": { "type": "string" }, "message": { "type": "string" } },
+        "additionalProperties": false
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "$ref": "#/components/schemas/Error" } },
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Request validation failed.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": { "code": "VALIDATION", "message": "event title must be a non-empty string" } } } }
+      },
+      "InvalidStateError": {
+        "description": "The operation is not allowed in the resource's current state.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": { "code": "INVALID_STATE", "message": "An event needs at least one ticket tier before publishing" } } } }
+      },
+      "InvalidTransitionError": {
+        "description": "The booking cannot be cancelled from its current state.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": { "code": "INVALID_TRANSITION", "message": "Booking cannot transition from paid to cancelled in this build" } } } }
+      },
+      "NotFoundError": {
+        "description": "The requested event, tier, or booking was not found.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": { "code": "NOT_FOUND", "message": "Event missing was not found" } } } }
+      },
+      "ForbiddenError": {
+        "description": "The caller does not own the booking.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": { "code": "FORBIDDEN", "message": "Only the attendee who made this booking can pay for it" } } } }
+      }
+    }
+  }
+}
