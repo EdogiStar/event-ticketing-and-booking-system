@@ -3,12 +3,29 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Event Ticketing</title>
+    <meta name="description" content="Find and book tickets for live events.">
+    <title>Event Ticketing | Browse events</title>
+    <link rel="stylesheet" href="/css/styles.css">
   </head>
   <body>
-    <main>
-      <h1>Event Ticketing</h1>
-      <p>The Build 3 server is running.</p>
+    <header class="site-header"><a class="brand" href="/">Event Ticketing</a></header>
+    <main class="page-shell">
+      <section class="hero" aria-labelledby="page-title">
+        <p class="eyebrow">Find your next experience</p>
+        <h1 id="page-title">Browse events</h1>
+        <p>Search concerts, meetups and more. Your seat is only a few clicks away.</p>
+      </section>
+      <section class="filters-panel" aria-labelledby="filter-title">
+        <h2 id="filter-title">Find an event</h2>
+        <form id="filters-form" class="filters">
+          <div class="field"><label for="search">Search</label><input id="search" name="search" type="search" placeholder="Event, venue or city"></div>
+          <div class="field"><label for="city">City</label><select id="city" name="city"><option value="">All cities</option></select></div>
+          <div class="field"><label for="max-price">Maximum ticket price</label><input id="max-price" name="maxPrice" type="number" min="0" step="1" placeholder="Any price"></div>
+          <div class="field"><label for="sort">Sort by</label><select id="sort" name="sort"><option value="date">Date</option><option value="price">Price</option><option value="title">Name</option></select></div>
+        </form>
+      </section>
+      <section aria-labelledby="events-title"><div class="section-heading"><h2 id="events-title">Upcoming events</h2><p id="results-count" class="muted" aria-live="polite"></p></div><div id="events-list" class="event-grid" aria-live="polite"></div></section>
     </main>
+    <script type="module" src="/js/pages/home.js"></script>
   </body>
 </html>

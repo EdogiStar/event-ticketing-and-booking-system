@@ -52,3 +52,10 @@
 - **What I asked:** Compare the project with the Build 4 criteria and complete any missing API behavior and acceptance tests.
 - **What came back:** Added an unpublish service operation and API route, documented its curl call, and expanded real-server API coverage for S02-S06 validation and behavior.
 - **What was wrong (or "nothing"):** The initial Build 4 implementation omitted unpublishing and relied too heavily on domain tests for criteria that Build 4 requires to pass through the API. Added the missing route and API-level cases.
+
+## Build 6
+
+### Prompt 1: Frontend on mock data
+- **What I asked:** Build the plain HTML, CSS and browser ES-module frontend with event browsing, filters, ticket selection, checkout countdown and mock payment.
+- **What came back:** Added the two pages, reusable DOM helper, mock API/data, responsive styles, and accessible checkout flow.
+- **What was wrong (or "nothing"):** Nothing remained failing; the mock data values were assumed because no dataset was specified.
